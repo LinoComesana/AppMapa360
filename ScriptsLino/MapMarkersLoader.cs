@@ -1,6 +1,7 @@
 using UnityEngine;
 using System.Collections;
 using System.Collections.Generic;
+using UnityEngine.Networking;
 using Mapbox.Unity.Map;
 using Mapbox.Utils;
 
@@ -10,7 +11,7 @@ public class MarcadorData
     public string nombre;
     public double lat;
     public double lon;
-    public string imagen360;
+    public string imagen360; // ahora usamos este campo, como en el JSON original
 }
 
 [System.Serializable]
@@ -23,66 +24,57 @@ public class MapMarkersLoader : MonoBehaviour
 {
     public AbstractMap map;
     public GameObject marcadorPrefab;
-    public string archivoJSON = "marcadores"; // nombre sin extensión
+
+    [Header("Firebase Settings")]
+    public string jsonURL = "https://mapa360app.web.app/marcadores.json";
 
     void Start()
     {
-        StartCoroutine(EsperarYCrearMarcadores());
+        StartCoroutine(DescargarYCrearMarcadores());
     }
 
-    IEnumerator EsperarYCrearMarcadores()
+    IEnumerator DescargarYCrearMarcadores()
     {
-        yield return new WaitForSeconds(2f); // espera 2 segundos
-        CargarMarcadoresDesdeJSON();
-    }
-
-    void CargarMarcadoresDesdeJSON()
-    {
-        TextAsset archivo = Resources.Load<TextAsset>(archivoJSON);
-        if (archivo == null)
+        using (UnityWebRequest request = UnityWebRequest.Get(jsonURL))
         {
-            Debug.LogError("Archivo JSON no encontrado en Resources.");
-            return;
-        }
+            yield return request.SendWebRequest();
 
-        string jsonEnvuelto = "{\"marcadores\":" + archivo.text + "}";
-        MarcadorListWrapper data = JsonUtility.FromJson<MarcadorListWrapper>(jsonEnvuelto);
-
-        if (data == null || data.marcadores == null)
-        {
-            Debug.LogError("No se pudieron cargar los datos de marcadores.");
-            return;
-        }
-
-        foreach (MarcadorData marcador in data.marcadores)
-        {
-            Debug.Log($"Instanciando marcador: {marcador.nombre} en {marcador.lat}, {marcador.lon}");
-
-            Vector2d location = new Vector2d(marcador.lat, marcador.lon);
-            Vector3 worldPos = map.GeoToWorldPosition(location, true);
-
-            GameObject nuevoMarcador = Instantiate(marcadorPrefab, worldPos, Quaternion.identity);
-            nuevoMarcador.name = marcador.nombre;
-            nuevoMarcador.transform.SetParent(map.transform, true);
-
-            MarkerUpdater updater = nuevoMarcador.AddComponent<MarkerUpdater>();
-            updater.map = map;
-            updater.location = new Vector2d(marcador.lat, marcador.lon);
-
-
-            // Añadir el script que abrirá la escena al hacer clic
-            if (nuevoMarcador.GetComponent<ButtonMarcador>() == null)
+            if (request.result != UnityWebRequest.Result.Success)
             {
-                nuevoMarcador.AddComponent<ButtonMarcador>();
+                Debug.LogError("Error al descargar JSON: " + request.error);
+                yield break;
             }
 
-            // Añadir el script que abrirá la escena al hacer clic
-            ButtonMarcador boton = nuevoMarcador.AddComponent<ButtonMarcador>();
+            string jsonOriginal = request.downloadHandler.text;
+            string jsonConWrapper = "{\"marcadores\":" + jsonOriginal + "}";
+            MarcadorListWrapper data = JsonUtility.FromJson<MarcadorListWrapper>(jsonConWrapper);
 
-            boton.nombreImagen360 = marcador.imagen360; // Cargamos directamente desde el JSON
+            if (data == null || data.marcadores == null)
+            {
+                Debug.LogError("Error al parsear JSON.");
+                yield break;
+            }
 
+            foreach (MarcadorData marcador in data.marcadores)
+            {
+                Debug.Log($"Instanciando marcador: {marcador.nombre} en {marcador.lat}, {marcador.lon}");
 
+                Vector2d location = new Vector2d(marcador.lat, marcador.lon);
+                Vector3 worldPos = map.GeoToWorldPosition(location, true);
 
+                GameObject nuevoMarcador = Instantiate(marcadorPrefab, worldPos, Quaternion.identity);
+                nuevoMarcador.name = marcador.nombre;
+                nuevoMarcador.transform.SetParent(map.transform, true);
+
+                // Asegura posición vinculada al mapa (importante)
+                MarkerUpdater updater = nuevoMarcador.AddComponent<MarkerUpdater>();
+                updater.map = map;
+                updater.location = location;
+
+                // Asignar comportamiento de click para cambiar de escena
+                ButtonMarcador boton = nuevoMarcador.AddComponent<ButtonMarcador>();
+                boton.nombreImagen360 = marcador.imagen360;
+            }
         }
     }
 }
