@@ -1,30 +1,47 @@
 using UnityEngine;
+using UnityEngine.Networking;
+using System.Collections;
 
 public class SkyboxLoader : MonoBehaviour
 {
-    public Material skyboxPlantilla; // Este es un material base con shader "Skybox/Panoramic"
-    
     void Start()
     {
-        string nombreImagen = PlayerPrefs.GetString("imagen360", "");
-        if (string.IsNullOrEmpty(nombreImagen))
+        string url = PlayerPrefs.GetString("imagen360");
+
+        Debug.Log("🛰️ Cargando imagen desde URL: " + url);
+
+        if (!string.IsNullOrEmpty(url))
         {
-            Debug.LogWarning("No se encontró imagen 360 en PlayerPrefs.");
-            return;
+            StartCoroutine(CargarImagenSkybox(url));
         }
-
-        // Carga la imagen desde Resources
-        Texture tex = Resources.Load<Texture>("Imagenes360/" + System.IO.Path.GetFileNameWithoutExtension(nombreImagen));
-        if (tex == null)
+        else
         {
-            Debug.LogError("No se encontró la textura: " + nombreImagen);
-            return;
+            Debug.LogWarning("⚠️ No se encontró URL en PlayerPrefs.");
         }
+    }
 
-        // Creamos una instancia del material base
-        Material nuevoSkybox = new Material(skyboxPlantilla);
-        nuevoSkybox.SetTexture("_MainTex", tex);
+    IEnumerator CargarImagenSkybox(string url)
+    {
+        UnityWebRequest request = UnityWebRequestTexture.GetTexture(url);
+        yield return request.SendWebRequest();
 
-        RenderSettings.skybox = nuevoSkybox;
+        if (request.result != UnityWebRequest.Result.Success)
+        {
+            Debug.LogError("❌ Error al cargar imagen desde URL: " + request.error);
+        }
+        else
+        {
+            Texture tex = DownloadHandlerTexture.GetContent(request);
+            Material skyboxMat = RenderSettings.skybox;
+
+            if (skyboxMat != null && skyboxMat.HasProperty("_MainTex"))
+            {
+                skyboxMat.SetTexture("_MainTex", tex);
+            }
+            else
+            {
+                Debug.LogError("⚠️ El material del Skybox no tiene la propiedad _MainTex.");
+            }
+        }
     }
 }
