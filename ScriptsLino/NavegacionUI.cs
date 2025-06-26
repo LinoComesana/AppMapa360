@@ -1,6 +1,7 @@
 using UnityEngine;
 using UnityEngine.SceneManagement;
 
+
 public class NavegacionUI : MonoBehaviour
 {
     public void IrASceneAgregarUbicacion()
@@ -15,6 +16,8 @@ public class NavegacionUI : MonoBehaviour
 
 
 
-
+ 
 
 }
+
+
